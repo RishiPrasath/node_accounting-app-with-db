@@ -2,26 +2,35 @@
 
 const { User } = require('./User.model');
 const { Expense } = require('./Expense.model');
+const { Category } = require('./Category.model');
+const { sequelize } = require('../db');
 
 // Define relationships with CASCADE delete
 User.hasMany(Expense, {
   foreignKey: 'userId',
-  onDelete: 'CASCADE', // This enables cascading deletion
+  onDelete: 'CASCADE',
 });
 
 Expense.belongsTo(User, {
   foreignKey: 'userId',
 });
 
+// Relationship between Category and Expense
+Category.hasMany(Expense, {
+  foreignKey: 'categoryId',
+  onDelete: 'SET NULL',
+});
+
+Expense.belongsTo(Category, {
+  foreignKey: 'categoryId',
+});
+
 // Make sure tables are synced with the right constraints
-// But without using console.log
 async function syncModels() {
   try {
-    await User.sync({ alter: true });
-    await Expense.sync({ alter: true });
+    await sequelize.sync({ alter: true });
   } catch (error) {
-    // Handle error silently or use a proper logger
-    // that complies with the linting rules
+    // Handle error silently
   }
 }
 
@@ -31,5 +40,6 @@ module.exports = {
   models: {
     User,
     Expense,
+    Category,
   },
 };

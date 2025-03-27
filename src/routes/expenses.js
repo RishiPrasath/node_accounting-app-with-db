@@ -48,6 +48,15 @@ router.get('/', async (req, res) => {
         'userId',
         'category',
         'note',
+        'categoryId',
+      ],
+      // Include the related category information
+      include: [
+        {
+          model: models.Category,
+          attributes: ['id', 'name'],
+          required: false, // Left join to get expenses even without a category
+        },
       ],
     });
 
@@ -56,7 +65,7 @@ router.get('/', async (req, res) => {
       const rawExpense = expense.get({ plain: true });
 
       // Return only the fields that tests expect
-      return {
+      const formattedExpense = {
         id: rawExpense.id,
         spentAt: rawExpense.spentAt,
         title: rawExpense.title,
@@ -65,6 +74,22 @@ router.get('/', async (req, res) => {
         category: rawExpense.category,
         note: rawExpense.note,
       };
+
+      // Add categoryId if it exists, but don't add it when null to maintain
+      // backward compatibility
+      if (rawExpense.categoryId) {
+        formattedExpense.categoryId = rawExpense.categoryId;
+      }
+
+      // Add category data if it exists
+      if (rawExpense.Category) {
+        formattedExpense.categoryData = {
+          id: rawExpense.Category.id,
+          name: rawExpense.Category.name,
+        };
+      }
+
+      return formattedExpense;
     });
 
     res.status(200).json(formattedExpenses);
@@ -76,7 +101,8 @@ router.get('/', async (req, res) => {
 // POST /expenses - Create a new expense
 router.post('/', async (req, res) => {
   try {
-    const { userId, spentAt, title, amount, category, note } = req.body;
+    const { userId, spentAt, title, amount, category, categoryId, note } =
+      req.body;
 
     // Check for required fields
     if (!userId || !spentAt || !title || !amount) {
@@ -90,6 +116,15 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'User not found' });
     }
 
+    // If categoryId is provided, verify the category exists
+    if (categoryId) {
+      const categoryExists = await models.Category.findByPk(categoryId);
+
+      if (!categoryExists) {
+        return res.status(400).json({ error: 'Category not found' });
+      }
+    }
+
     // Create expense
     const newExpense = await models.Expense.create({
       userId,
@@ -97,6 +132,7 @@ router.post('/', async (req, res) => {
       title,
       amount,
       category,
+      categoryId,
       note,
     });
 
@@ -112,6 +148,11 @@ router.post('/', async (req, res) => {
       note: newExpense.note,
     };
 
+    // Add categoryId to the response if it exists
+    if (newExpense.categoryId) {
+      responseData.categoryId = newExpense.categoryId;
+    }
+
     res.status(201).json(responseData);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -122,7 +163,15 @@ router.post('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const id = Number(req.params.id);
-    const expense = await models.Expense.findByPk(id);
+    const expense = await models.Expense.findByPk(id, {
+      include: [
+        {
+          model: models.Category,
+          attributes: ['id', 'name'],
+          required: false,
+        },
+      ],
+    });
 
     if (!expense) {
       return res.status(404).json({ error: 'Expense not found' });
@@ -138,6 +187,19 @@ router.get('/:id', async (req, res) => {
       category: expense.category,
       note: expense.note,
     };
+
+    // Add categoryId to the response if it exists
+    if (expense.categoryId) {
+      responseData.categoryId = expense.categoryId;
+    }
+
+    // Add category data if it exists
+    if (expense.Category) {
+      responseData.categoryData = {
+        id: expense.Category.id,
+        name: expense.Category.name,
+      };
+    }
 
     res.status(200).json(responseData);
   } catch (error) {
@@ -155,7 +217,14 @@ router.patch('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Expense not found' });
     }
 
-    const allowedFields = ['spentAt', 'title', 'amount', 'category', 'note'];
+    const allowedFields = [
+      'spentAt',
+      'title',
+      'amount',
+      'category',
+      'categoryId',
+      'note',
+    ];
     const updateData = {};
 
     // Build update object with allowed fields
@@ -170,11 +239,30 @@ router.patch('/:id', async (req, res) => {
       return res.status(400).json({ error: 'No valid fields provided' });
     }
 
+    // If categoryId is provided, verify the category exists
+    if (updateData.categoryId) {
+      const categoryExists = await models.Category.findByPk(
+        updateData.categoryId,
+      );
+
+      if (!categoryExists) {
+        return res.status(400).json({ error: 'Category not found' });
+      }
+    }
+
     // Update expense
     await expense.update(updateData);
 
-    // Get the updated expense data
-    const updatedExpense = await models.Expense.findByPk(id);
+    // Get the updated expense data with category information
+    const updatedExpense = await models.Expense.findByPk(id, {
+      include: [
+        {
+          model: models.Category,
+          attributes: ['id', 'name'],
+          required: false,
+        },
+      ],
+    });
 
     // Return only the fields that tests expect
     const responseData = {
@@ -186,6 +274,19 @@ router.patch('/:id', async (req, res) => {
       category: updatedExpense.category,
       note: updatedExpense.note,
     };
+
+    // Add categoryId to the response if it exists
+    if (updatedExpense.categoryId) {
+      responseData.categoryId = updatedExpense.categoryId;
+    }
+
+    // Add category data if it exists
+    if (updatedExpense.Category) {
+      responseData.categoryData = {
+        id: updatedExpense.Category.id,
+        name: updatedExpense.Category.name,
+      };
+    }
 
     res.status(200).json(responseData);
   } catch (error) {
